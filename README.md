@@ -1,5 +1,5 @@
 # OCR Data Labeling & Cropping Tool
-
+![Launch Screen of OCR Labeling Tool](assets/Launch_Screen.png)
 A desktop GUI application built with **PyQt6** for efficient vertical image cropping and text dataset labeling for OCR training. Optimized for fast, fully keyboard-driven workflows with support for cutting **multiple cropped segments** from a single original image, smart batch loading for large folders (10k+ images), and robust input method editor (IME/fcitx) support.
 
 ## Features
@@ -74,4 +74,4 @@ For each crop segment saved under an original image `page1.jpg`:
 ## Requirements
 
 - Python 3.9+
-- PyQt6 >= 6.4.2
+- PyQt6 == 6.4.2
