@@ -67,8 +67,8 @@ For each crop segment saved under an original image `page1.jpg`:
 - `{output_folder}/page1_crop_001.jpg` — The cropped image region.
 - `{output_folder}/page1_crop.txt` — The consolidated label file listing all crops:
   ```text
-  page1_crop_001.jpg first crop label
-  page1_crop_002.jpg second crop label
+  {output_folder}/page1_crop_001.jpg first crop label
+  {output_folder}/page1_crop_002.jpg second crop label
   ```
 
 ## Requirements
