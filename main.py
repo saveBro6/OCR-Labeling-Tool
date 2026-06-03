@@ -608,6 +608,16 @@ class LabelZoneWidget(QWidget):
         )
         self._input.returnPressed.connect(lambda: self.label_committed.emit(self.text))
         irow.addWidget(self._input, 1)
+
+        self._MAX_CHARS = 25                           # Configurable parameter
+        self._counter = QLabel(f"0 / {self._MAX_CHARS}")
+        self._counter.setStyleSheet(
+            f"color:{C['text_muted']};font-size:12px;font-weight:600;"
+            f"background:transparent;border:none;padding-right:4px;"
+        )
+        self._input.textChanged.connect(self._update_counter)
+        irow.addWidget(self._counter)
+
         blay.addLayout(irow)
         lay.addWidget(box)
         self._active_idx: Optional[int] = None
@@ -631,6 +641,9 @@ class LabelZoneWidget(QWidget):
         self._preview.clear()
         self._preview.setText("No crop selected")
         self._input.clear()
+
+    def _update_counter(self, text: str):
+        self._counter.setText(f"{len(text)} / {self._MAX_CHARS}")
 
     @property
     def text(self) -> str:
