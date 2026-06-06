@@ -47,7 +47,7 @@ python main.py
 
 | Key / Shortcut | Action |
 |---|---|
-| `Left Arrow` / `Right Arrow` | Move vertical cursor by **5px** |
+| `Left Arrow` / `Right Arrow` | Move vertical cursor by **3px** |
 | `Shift` + `Arrow` | Move vertical cursor by **20px** |
 | `Ctrl` + `Arrow` | Move vertical cursor by **100px** |
 | `O` | Close current crop (creates segment from open boundary to cursor) |
@@ -58,6 +58,9 @@ python main.py
 | `Ctrl+Z` (inside canvas) | Undo last crop (deletes crop image & restores open/cursor boundaries) |
 | `Ctrl+N` | Go to Next image in queue (auto-advances batches) |
 | `Ctrl+P` | Go to Prev image in queue (auto-retreats batches) |
+| `Ctrl+Down` | Navigate to next text block |
+| `Ctrl+Up` | Navigate to previous text block |
+| `Ctrl+B` | Paste current text block into label input |
 | `Ctrl+Wheel` | Zoom in/out on canvas |
 | `F` | Reset zoom / fit image to canvas view |
 

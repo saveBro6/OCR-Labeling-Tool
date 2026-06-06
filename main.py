@@ -20,6 +20,7 @@ os.environ["XMODIFIERS"] = "@im=fcitx"
 os.environ["GTK_IM_MODULE"] = "fcitx"
 
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
@@ -556,6 +557,163 @@ class CropHistoryGrid(QWidget):
 #  LABEL ZONE WIDGET
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TEXT BLOCK PREVIEW (for auto-paste workflow)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TextBlockPreview(QWidget):
+    """Displays text blocks split from the sidecar .txt file.
+    Highlights the current block and provides navigation."""
+
+    block_selected = pyqtSignal(int, str)   # (index, block_text)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(140)
+        self._blocks: List[str] = []
+        self._current_idx: int = 0
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(2)
+
+        # Header row with title + navigation info
+        hrow = QHBoxLayout(); hrow.setSpacing(4)
+        hdr = QLabel("  📑  TEXT BLOCKS")
+        hdr.setStyleSheet(
+            f"color:{C['text_dim']};font-size:11px;font-weight:bold;"
+            f"letter-spacing:1.5px;padding:2px 0;"
+        )
+        hrow.addWidget(hdr)
+        hrow.addStretch()
+        self._nav_label = QLabel("0 / 0")
+        self._nav_label.setStyleSheet(
+            f"color:{C['text_muted']};font-size:11px;font-weight:600;"
+            f"padding-right:6px;"
+        )
+        hrow.addWidget(self._nav_label)
+        outer.addLayout(hrow)
+
+        # Scrollable block list
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._scroll.setFixedHeight(115)
+        self._scroll.setStyleSheet(
+            f"QScrollArea{{border:1px solid {C['border']};border-radius:8px;"
+            f"background:{C['bg_dark']};}}"
+            f"QScrollBar:vertical{{width:6px;background:transparent;}}"
+            f"QScrollBar::handle:vertical{{background:{C['border']};"
+            f"border-radius:3px;min-height:20px;}}"
+            f"QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical"
+            f"{{width:0;height:0;}}"
+        )
+        self._container = QWidget()
+        self._container.setStyleSheet("background:transparent;")
+        self._vlay = QVBoxLayout(self._container)
+        self._vlay.setContentsMargins(6, 6, 6, 6)
+        self._vlay.setSpacing(3)
+        self._vlay.addStretch()
+        self._scroll.setWidget(self._container)
+        outer.addWidget(self._scroll)
+
+        self._labels: List[QLabel] = []
+
+    def set_blocks(self, blocks: List[str]):
+        """Populate with new text blocks."""
+        # Clear old
+        for lbl in self._labels:
+            self._vlay.removeWidget(lbl)
+            lbl.deleteLater()
+        self._labels.clear()
+        self._blocks = blocks
+        self._current_idx = 0
+
+        for i, text in enumerate(blocks):
+            lbl = QLabel(f"[{i+1}] {text}")
+            lbl.setWordWrap(True)
+            lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            lbl.setStyleSheet(self._item_ss(False))
+            lbl.mousePressEvent = lambda ev, idx=i: self.select_block(idx)
+            self._vlay.insertWidget(self._vlay.count() - 1, lbl)
+            self._labels.append(lbl)
+
+        self._update_highlight()
+        self._update_nav()
+
+    def clear_blocks(self):
+        self.set_blocks([])
+
+    def select_block(self, idx: int):
+        if not self._blocks or idx < 0 or idx >= len(self._blocks):
+            return
+        self._current_idx = idx
+        self._update_highlight()
+        self._update_nav()
+        self.block_selected.emit(idx, self._blocks[idx])
+
+    def next_block(self):
+        if self._blocks and self._current_idx < len(self._blocks) - 1:
+            self.select_block(self._current_idx + 1)
+
+    def prev_block(self):
+        if self._blocks and self._current_idx > 0:
+            self.select_block(self._current_idx - 1)
+
+    def consume_next_block(self) -> str:
+        """Return the current block text and advance pointer.
+        Used for auto-paste on crop commit."""
+        if not self._blocks:
+            return ""
+        idx = self._current_idx
+        text = self._blocks[idx]
+        self._update_highlight()
+        self._update_nav()
+        # Advance for next consume (but don't exceed last)
+        if idx < len(self._blocks) - 1:
+            self._current_idx = idx + 1
+            self._update_highlight()
+            self._update_nav()
+        return text
+
+    @property
+    def current_text(self) -> str:
+        if self._blocks and 0 <= self._current_idx < len(self._blocks):
+            return self._blocks[self._current_idx]
+        return ""
+
+    @property
+    def has_blocks(self) -> bool:
+        return len(self._blocks) > 0
+
+    def _update_highlight(self):
+        for i, lbl in enumerate(self._labels):
+            lbl.setStyleSheet(self._item_ss(i == self._current_idx))
+        # Scroll to current
+        if self._labels and 0 <= self._current_idx < len(self._labels):
+            self._scroll.ensureWidgetVisible(self._labels[self._current_idx])
+
+    def _update_nav(self):
+        total = len(self._blocks)
+        cur = self._current_idx + 1 if total > 0 else 0
+        self._nav_label.setText(f"{cur} / {total}")
+
+    @staticmethod
+    def _item_ss(active: bool) -> str:
+        if active:
+            return (
+                f"color:{C['text']};background:{C['bg_elevated']};"
+                f"border:1px solid {C['accent']};border-radius:4px;"
+                f"padding:4px 6px;font-size:12px;"
+            )
+        return (
+            f"color:{C['text_muted']};background:transparent;"
+            f"border:1px solid transparent;border-radius:4px;"
+            f"padding:4px 6px;font-size:12px;"
+        )
+
+
 class LabelZoneWidget(QWidget):
     label_committed = pyqtSignal(str)
 
@@ -656,6 +814,11 @@ class LabelZoneWidget(QWidget):
     def focus_input(self):
         self._input.setFocus()
 
+    def set_text(self, text: str):
+        """Programmatically set label text (used by text block paste)."""
+        self._input.setText(text)
+        self._input.setFocus()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MAIN WINDOW
@@ -679,6 +842,8 @@ class MainWindow(QMainWindow):
         self._batch_start: int = 0
         self._batch_files: List[str] = []
         self._scanner: Optional[DirectoryScanner] = None
+        self._text_blocks: List[str] = []
+        self._MAX_CHARS: int = 25
 
         self._build_ui()
         self._bind_shortcuts()
@@ -721,6 +886,10 @@ class MainWindow(QMainWindow):
         self._label_zone = LabelZoneWidget()
         self._label_zone.label_committed.connect(self._on_label_commit)
         ll.addWidget(self._label_zone)
+
+        self._block_preview = TextBlockPreview()
+        self._block_preview.block_selected.connect(self._on_block_selected)
+        ll.addWidget(self._block_preview)
         sp.addWidget(left)
 
         # Right
@@ -1019,14 +1188,17 @@ class MainWindow(QMainWindow):
         self._canvas.setFocus()
         # Sidecar
         txt = Path(path).with_suffix(".txt")
+        raw_text = ""
         if txt.exists():
             try:
-                self._txt_view.setPlainText(
-                    txt.read_text(encoding="utf-8", errors="replace"))
+                raw_text = txt.read_text(encoding="utf-8", errors="replace")
+                self._txt_view.setPlainText(raw_text)
             except Exception:
                 self._txt_view.clear()
         else:
             self._txt_view.clear()
+        # Split into text blocks for auto-paste
+        self._split_text_blocks(raw_text)
         self._status.showMessage(
             f"📷 {Path(path).name}  ({pix.width()}×{pix.height()})  —  "
             f"Use ← → to position cursor, O to crop"
@@ -1040,6 +1212,10 @@ class MainWindow(QMainWindow):
     def _on_crop_created(self, seg: CropSegment):
         self._history.add_card(seg)
         self._history.set_active_card(seg.index)
+        # Auto-paste text block if available
+        if self._block_preview.has_blocks:
+            block_text = self._block_preview.consume_next_block()
+            seg.label_text = block_text
         self._label_zone.load_segment(seg)
         self._refresh_title()
         self._status.showMessage(
@@ -1059,6 +1235,22 @@ class MainWindow(QMainWindow):
                 f"Open: {open_x}  |  Cursor: {cursor_x}  |  Width: {width}px  —  "
                 f"Press O to crop"
             )
+
+    def _on_block_selected(self, idx: int, text: str):
+        """User clicked or navigated to a text block — paste into label."""
+        self._label_zone.set_text(text)
+
+    def _split_text_blocks(self, raw: str):
+        """Split raw text into blocks of <= MAX_CHARS using textwrap."""
+        if not raw.strip():
+            self._text_blocks = []
+            self._block_preview.clear_blocks()
+            return
+        self._text_blocks = textwrap.wrap(
+            raw.strip(), width=self._MAX_CHARS,
+            break_long_words=True, break_on_hyphens=False,
+        )
+        self._block_preview.set_blocks(self._text_blocks)
 
     def _on_label_commit(self, _):
         self._do_save()
@@ -1186,6 +1378,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self._go_next)
         QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self._go_prev)
         QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self._do_undo)
+        QShortcut(QKeySequence("Ctrl+Down"), self).activated.connect(
+            self._block_preview.next_block)
+        QShortcut(QKeySequence("Ctrl+Up"), self).activated.connect(
+            self._block_preview.prev_block)
+        QShortcut(QKeySequence("Ctrl+B"), self).activated.connect(
+            lambda: self._label_zone.set_text(self._block_preview.current_text))
 
     def eventFilter(self, obj, event):
         if event.type() != QEvent.Type.KeyPress:
@@ -1218,7 +1416,7 @@ class MainWindow(QMainWindow):
             elif mods & Qt.KeyboardModifier.ShiftModifier:
                 step = 20
             else:
-                step = 5
+                step = 3
             if k == Qt.Key.Key_Left:
                 step = -step
             self._canvas.move_cursor(step)
